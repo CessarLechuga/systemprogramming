@@ -1,17 +1,38 @@
-/*fn sum(total: &mut i32, low:i32,igh:i32){
+/*const FREEZING_POINT_F: f64 = 32.0;
 
-    for num: i32 in low..+high{
-        *total+=num;
+fn fahrenheit_to_celsius(f: f64) -> f64 {
+    (f - FREEZING_POINT_F) * 5.0 / 9.0
+}
 
-        println("{},num");
+fn celsius_to_fahrenheit(c: f64) -> f64 {
+    c * 9.0 / 5.0 + FREEZING_POINT_F
+}
+
+fn main() {
+    let mut temperature_f = 32.0;
+    
+    println!("{}°F is equal to {:.2}°C", temperature_f, fahrenheit_to_celsius(temperature_f));
+    
+    for _ in 0..5 {
+        temperature_f += 1.0;
+        println!("{}°F is equal to {:.2}°C", temperature_f, fahrenheit_to_celsius(temperature_f));
     }
 }
 
-fn main(){
-let mut ans:i32=0;
-sum(total:&mut ans, low 0, high )
-
+*/
+/*fn sum(total: &mut i32, low: i32, high: i32) {
+    for num in low..=high {
+        *total += num;
+        println!("{}", num);
+    }
 }
+
+fn main() {
+    let mut ans: i32 = 0;
+    sum(&mut ans, 0, 10);
+    println!("Total sum: {}", ans);
+}
+
 */
 
 /*
@@ -135,6 +156,7 @@ fn main() {
     //inside of user_infro.txt
     //Read user_info.txt and print the content on the screen 
 
+    /*
     use std::io::{self, Read, Write};
     use std::fs::File;
     
@@ -197,3 +219,30 @@ fn main() {
         println!("{}", contents);
         Ok(())
     }
+
+    */
+
+    /*
+    use std::fs::File;
+    use std::io::{self, Read};
+    use std::path::Path;
+
+    use std::process::Command;
+
+    fn read_file(path &str)->::Result<string>
+
+    fn executing_os_commands_linux() {
+        let output = Command::new("ls")
+            .arg("-l")
+            .output()
+            .expect("Failed to execute command");
+    
+        println!("Command output: {}", String::from_utf8_lossy(&output.stdout));
+    }
+
+    
+
+fn main() {
+    executing_os_commands_linux();
+}
+    */
