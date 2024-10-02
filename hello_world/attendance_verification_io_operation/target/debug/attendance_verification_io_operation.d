@@ -1,0 +1,1 @@
+/workspaces/systemprogramming/hello_world/attendance_verification_io_operation/target/debug/attendance_verification_io_operation: /workspaces/systemprogramming/hello_world/attendance_verification_io_operation/src/main.rs
