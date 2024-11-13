@@ -101,21 +101,15 @@ fn main() {
 }
 
 */
-
-fn add(a: i32, b: i32) -> i32 {
-    a + b
-}
+use std::fs::File;
 
 fn main() {
-    println!("2 + 2 = {}", add(2, 2));
-}
+    let f = File::open("hello.txt");
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add() {
-        assert_eq!(add(2, 2), 4);
-    }
+    let f = match f {
+        Ok(file) => file,
+        Err(error) => {
+            panic!("Problem opening the file: {:?}", error)
+        },
+    };
 }
