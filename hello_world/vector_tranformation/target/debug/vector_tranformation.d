@@ -1,0 +1,1 @@
+/workspaces/systemprogramming/hello_world/vector_tranformation/target/debug/vector_tranformation: /workspaces/systemprogramming/hello_world/vector_tranformation/src/main.rs
