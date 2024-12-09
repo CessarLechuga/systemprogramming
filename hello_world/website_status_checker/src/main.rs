@@ -1,12 +1,10 @@
 use std::{
     sync::Arc,
     thread,
-    time::{Duration, Instant},
+    time::{Duration, SystemTime, UNIX_EPOCH, Instant},
 };
-use chrono::{DateTime, Utc};
-use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
+use ureq;  // Add this import
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -20,31 +18,40 @@ pub struct WebsiteStatus {
     url: String,
     status: Result<u16, String>,
     response_time: Duration,
-    timestamp: DateTime<Utc>,
+    timestamp: u64,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum MonitorError {
-    #[error("Request failed: {0}")]
-    RequestError(#[from] reqwest::Error),
-    #[error("Channel error: {0}")]
-    ChannelError(String),
+    RequestError(String),
+    AgentError(String),
 }
+
+impl std::fmt::Display for MonitorError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MonitorError::RequestError(e) => write!(f, "Request failed: {}", e),
+            MonitorError::AgentError(e) => write!(f, "Agent error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for MonitorError {}
 
 pub struct Monitor {
     config: Config,
-    client: Arc<Client>,
+    agent: Arc<ureq::Agent>,
 }
 
 impl Monitor {
     pub fn new(config: Config) -> Result<Self, MonitorError> {
-        let client = Client::builder()
+        let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_secs(config.timeout_seconds))
-            .build()?;
+            .build();
 
         Ok(Monitor {
             config,
-            client: Arc::new(client),
+            agent: Arc::new(agent),
         })
     }
 
@@ -53,11 +60,11 @@ impl Monitor {
             let mut handles = Vec::new();
             
             for url in urls {
-                let client = Arc::clone(&self.client);
+                let agent = Arc::clone(&self.agent);
                 let max_retries = self.config.max_retries;
                 
                 let handle = s.spawn(move || {
-                    Self::check_single_website(&client, &url, max_retries)
+                    Self::check_single_website(&agent, &url, max_retries)
                 });
                 handles.push(handle);
             }
@@ -70,19 +77,22 @@ impl Monitor {
         Ok(pool)
     }
 
-    fn check_single_website(client: &Client, url: &str, max_retries: u32) -> WebsiteStatus {
+    fn check_single_website(agent: &ureq::Agent, url: &str, max_retries: u32) -> WebsiteStatus {
         let start = Instant::now();
         let mut retries = 0;
         let mut last_error = None;
 
         while retries < max_retries {
-            match client.get(url).send() {
+            match agent.get(url).call() {
                 Ok(response) => {
                     return WebsiteStatus {
                         url: url.to_string(),
-                        status: Ok(response.status().as_u16()),
+                        status: Ok(response.status()),
                         response_time: start.elapsed(),
-                        timestamp: Utc::now(),
+                        timestamp: SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
                     };
                 }
                 Err(e) => {
@@ -97,7 +107,10 @@ impl Monitor {
             url: url.to_string(),
             status: Err(last_error.unwrap_or_else(|| "Unknown error".to_string())),
             response_time: start.elapsed(),
-            timestamp: Utc::now(),
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
         }
     }
 }
@@ -126,16 +139,30 @@ fn main() -> Result<(), MonitorError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::Server;
+    use std::net::TcpListener;
+    use std::io::Write;
+    use std::thread;
+
+    fn create_test_server() -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                if let Ok(mut stream) = stream {
+                    let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK";
+                    stream.write_all(response.as_bytes()).unwrap();
+                }
+            }
+        });
+
+        format!("http://127.0.0.1:{}", port)
+    }
 
     #[test]
     fn test_successful_request() {
-        let mut server = Server::new();
-        let mock = server
-            .mock("GET", "/")
-            .with_status(200)
-            .create();
-
+        let server_url = create_test_server();
+        
         let config = Config {
             worker_threads: 4,
             timeout_seconds: 5,
@@ -143,16 +170,14 @@ mod tests {
         };
 
         let monitor = Monitor::new(config).unwrap();
-        let results = monitor.check_websites(vec![server.url()]).unwrap();
+        let results = monitor.check_websites(vec![server_url]).unwrap();
 
         assert_eq!(results.len(), 1);
         assert!(matches!(results[0].status, Ok(200)));
-        mock.assert();
     }
 
     #[test]
     fn test_timeout_handling() {
-        // Use a non-existent server that should timeout
         let config = Config {
             worker_threads: 4,
             timeout_seconds: 1,
@@ -160,7 +185,6 @@ mod tests {
         };
 
         let monitor = Monitor::new(config).unwrap();
-        // Use a non-routable IP address that should timeout quickly
         let results = monitor.check_websites(vec!["http://198.51.100.1:12345".to_string()]).unwrap();
 
         assert_eq!(results.len(), 1);
